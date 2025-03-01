@@ -4,16 +4,14 @@ import re
 import requests
 import joblib
 import pandas as pd
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-app = Flask(__name__)
-# Enable CORS for all routes
+app = Flask(__name__)  # Use __name__
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # --------------------------------------------------------------------
-# 1. Load the trained model (this remains, though it won't be used for fake predictions)
+# 1. Load the trained model (retained for endpoint compatibility)
 # --------------------------------------------------------------------
 model = joblib.load("model_expanded.pkl")
 all_training_cols = getattr(model, "feature_names_in_", None)
@@ -35,18 +33,15 @@ def parse_age(age_str):
         return 30  # fallback
 
 # --------------------------------------------------------------------
-# 3. The main prediction logic (kept for endpoint compatibility)
+# 3. The main prediction logic (we fake the prediction values)
 # --------------------------------------------------------------------
 def make_prediction(age_str, gender_str, neigh_str, subst_str):
-    # This function is retained but its output will be ignored for fake predictions.
-    # We'll use fake prediction values instead.
-    # However, we simulate a prediction structure.
-    overdose_probability = 0.21  # Fake value
-    overdose_class = 0           # Fake value
-    confidence = "Low"           # Fake value
+    # Fake values for demonstration
+    overdose_probability = 0.21  # Random fake value
+    overdose_class = 0           # Fake value (0 indicates lower risk)
+    confidence = "Low"           # Fake confidence
     explanation = (
-        "Substance suggests a high overdose risk. Younger age group is correlated with "
-        "certain substance use patterns (example)."
+        "Substance suggests a high overdose risk. Younger age group is correlated with certain substance use patterns (example)."
     )
     return {
         "overdose_probability": overdose_probability,
@@ -56,41 +51,64 @@ def make_prediction(age_str, gender_str, neigh_str, subst_str):
     }
 
 # --------------------------------------------------------------------
-# 4. Fake Gemini API call: Generate a human-friendly summary without making an actual API call.
+# 4. Helper function to format output with the Gemini LLM (fake call)
 # --------------------------------------------------------------------
 def format_output_with_gemini(prediction_json):
     """
     Fakes a call to the Gemini API by generating a human-friendly summary based on the prediction JSON.
+    The prompt instructs the LLM to analyze the provided input and generated prediction,
+    discussing the probability of overdose, class, confidence, and high-risk factors.
+    If Winnipeg is mentioned in the input, additional context should be provided.
     """
-    try:
-        data = json.loads(prediction_json)
-        parsed_data = data.get("parsed_data", {})
-        prediction = data.get("prediction", {})
-        overdose_probability = prediction.get("overdose_probability", 0.0)
-        overdose_class = prediction.get("overdose_class", 0)
-        confidence = prediction.get("confidence", "Low")
-        explanation = prediction.get("explanation", "")
-        # Create a nicely formatted summary using the fake values
-        fake_summary = (
-            f"--- Prediction Summary ---\n"
-            f"Overdose Probability: {overdose_probability:.2f}\n"
-            f"Overdose Class: {overdose_class} (0 indicates lower risk, 1 indicates higher risk)\n"
-            f"Confidence: {confidence}\n\n"
-            f"Explanation:\n{explanation}\n\n"
-            f"Additional Context: Based on the input data, the risk appears to be moderate. "
-            f"Local factors (for example, conditions in Winnipeg or Exchange) may further affect this outcome. "
-            f"Please consult a professional for a comprehensive assessment."
-        )
-        return fake_summary
-    except Exception as e:
-        return f"Error generating fake summary: {str(e)}"
+    # Embedded Gemini API key (insecure for production)
+    gemini_api_key = "AIzaSyD9DdnncGKuhhjIMBFXiU7ZVspWtv1qvgI"
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_api_key}"
+    
+    prompt = f"""
+You are a knowledgeable and articulate data analyst specializing in substance use risk prediction. Based on the JSON output below, please analyze the input data and generate a detailed, human-friendly summary. Your summary should include:
+
+1. A clear explanation of the predicted overdose probability and what it implies, based on the provided random value.
+2. An interpretation of the overdose class (0 or 1) and its significance.
+3. A discussion of the confidence level (Low, Medium, or High), and what that means in context.
+4. A plain language explanation of any high-risk factors identified in the input.
+5. If the input mentions a location like Winnipeg, provide additional local contextual insights.
+6. Overall, study the input data carefully and weave a narrative that explains the generated prediction and offers contextual understanding of the overdose risk.
+7. Mention the location, name and age -- in ur response again
+
+Below is the JSON output from the substance use prediction model:
+
+{prediction_json}
+
+Return your answer in clear, plain text with organized headings.
+"""
+    payload = {
+        "contents": [
+            {"parts": [{"text": prompt}]}
+        ]
+    }
+    headers = {"Content-Type": "application/json"}
+    
+    response = requests.post(gemini_url, headers=headers, json=payload)
+    
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            candidate = data["candidates"][0]
+            formatted_text = candidate.get("output") or candidate.get("content")
+            if not formatted_text:
+                formatted_text = "No formatted output found in Gemini response."
+        except Exception as e:
+            formatted_text = f"Error parsing Gemini response: {str(e)}"
+        return formatted_text
+    else:
+        return f"Error from Gemini: {response.status_code} {response.text}"
 
 # --------------------------------------------------------------------
 # 5. Flask endpoints
 # --------------------------------------------------------------------
 @app.route("/")
 def home():
-    return "Fake Substance Use Prediction API using Gemini LLM is running!"
+    return "Enhanced Substance Use Prediction API is running!"
 
 @app.route("/predict_expanded", methods=["POST"])
 def predict_expanded():
@@ -102,7 +120,7 @@ def predict_expanded():
       "Neighborhood": "exchange",
       "Substance": "fentanyl"
     }
-    Uses the fake prediction logic and Gemini faking to generate output.
+    Uses fake prediction logic and pipes the output through Gemini for formatting.
     """
     data = request.get_json() or {}
     age_str = data.get("Age")
@@ -124,7 +142,7 @@ def predict_from_text():
       "text": "What is the substance use of a 15 to 19 years old male in Exchange?"
     }
     Parses the free-text (naively) to extract Age, Gender, Neighborhood, and Substance,
-    then uses the fake prediction logic and returns a Gemini-faked formatted summary.
+    then calls the fake prediction logic and pipes the result through Gemini for formatting.
     """
     body = request.get_json() or {}
     user_text = body.get("text", "").lower()
@@ -132,13 +150,13 @@ def predict_from_text():
     if not user_text:
         return jsonify({"error": "No text provided"}), 400
 
-    # Naively extract Age from text using regex
+    # Naively extract Age from "NN years old"
     match = re.search(r"(\d{1,3})\s?years?\s?old", user_text)
     if match:
         numeric_age = match.group(1)
         age_str_detected = f"{numeric_age} to {numeric_age}"
     else:
-        age_str_detected = "30 to 34"  # fallback if not found
+        age_str_detected = "30 to 34"  # fallback
 
     # Naively extract Gender
     gender_detected = "male" if "male" in user_text else ("female" if "female" in user_text else "unknown")
@@ -159,7 +177,6 @@ def predict_from_text():
             substance_detected = s
             break
 
-    # Call the fake prediction logic
     result = make_prediction(
         age_str_detected,
         gender_detected,
@@ -174,7 +191,6 @@ def predict_from_text():
         "Substance": substance_detected
     }
     
-    # Build a JSON string from the parsed data and prediction to send to our fake Gemini function
     prediction_json = json.dumps({
         "parsed_data": parsed_data,
         "prediction": result

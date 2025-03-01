@@ -4,7 +4,9 @@ const MainLayout = ({ children }) => {
 	return (
 		<div className='text-text-primary'>
 			<Header />
-			<main className='flex-grow mx-auto py-16 px-64 bg-background'>{children}</main>
+			<main className='flex-grow mx-auto p-8 sm:px-16 md:px-32 lg:px-64 bg-[var(--color-background)]'>
+				{children}
+			</main>
 		</div>
 	);
 };

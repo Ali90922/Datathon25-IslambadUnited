@@ -1,17 +1,20 @@
-# app.py
+# app_expanded.py
+
 import joblib
 import pandas as pd
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Load the saved model at startup
-model = joblib.load("model.pkl")
+# Load the expanded model
+model = joblib.load("model_expanded.pkl")
+
+# If your scikit-learn version supports it, we can retrieve the training columns:
+all_training_cols = getattr(model, "feature_names_in_", None)
 
 def parse_age(age_str):
     """
-    Same logic as in train_model.py (keep consistent).
-    '30 to 34' -> 32
+    Convert '30 to 34' -> 32. If parsing fails, default to 30.
     """
     try:
         parts = age_str.split(" to ")
@@ -19,58 +22,90 @@ def parse_age(age_str):
         high = int(parts[1])
         return (low + high) // 2
     except:
-        return 30  # fallback if parsing fails
+        return 30  # fallback if user input is malformed
 
-@app.route("/", methods=["GET"])
+@app.route("/")
 def home():
-    return "Substance Use Prediction API is running!"
+    return "Expanded Substance Use Prediction API is running!"
 
-@app.route("/predict", methods=["POST"])
-def predict():
+@app.route("/predict_expanded", methods=["POST"])
+def predict_expanded():
     """
-    Expects JSON data, for example:
+    Expects JSON data, e.g.:
     {
       "Age": "30 to 34",
-      "Gender": "Male"
+      "Gender": "Male",
+      "Neighborhood": "riverheights",
+      "Substance": "opioids"
     }
-    Returns a JSON object with:
+    Some fields can be missing. We'll fallback to defaults:
+      - Age -> "30 to 34"
+      - Gender -> "unknown"
+      - Neighborhood -> "unknown"
+      - Substance -> "none"
+
+    Returns JSON:
     {
-      "isOpioidProbability": 0.73,
-      "isOpioidClass": 1
+      "overdose_probability": float,
+      "overdose_class": int
     }
     """
+    data = request.get_json() or {}
 
-    data = request.get_json()
-
-    # Extract inputs
+    # 1. Extract user inputs, fallback if missing
     age_str = data.get("Age", "30 to 34")
-    gender_str = data.get("Gender", "Male")
-
-    # Convert to numeric
     age_val = parse_age(age_str)
-    gender_num = 1 if gender_str.strip().lower() == "male" else 0
 
-    # Build a DataFrame for the model
-    input_df = pd.DataFrame({
+    gender_str = data.get("Gender", "unknown").strip().lower()
+    gender_num = 1 if gender_str == "male" else 0
+
+    neigh_str = data.get("Neighborhood", "unknown").strip().lower()
+    subst_str = data.get("Substance", "none").strip().lower()
+
+    # 2. Build a mini DataFrame with the user input
+    input_dict = {
         "AgeNumeric": [age_val],
-        "GenderNum": [gender_num]
-    })
+        "GenderNum": [gender_num],
+        "Neighborhood": [neigh_str],
+        "Substance": [subst_str]
+    }
+    df_input = pd.DataFrame(input_dict)
 
-    # Predict class (0 or 1)
-    y_pred_class = model.predict(input_df)[0]
+    # 3. One-hot encode Neighborhood & Substance
+    df_input_encoded = pd.get_dummies(
+        df_input,
+        columns=["Neighborhood", "Substance"],
+        prefix=["neigh", "subst"]
+    )
 
-    # Predict probability (for logistic regression, returns [prob_of_0, prob_of_1])
-    y_pred_proba = model.predict_proba(input_df)[0][1]  # Probability of class "1"
+    # 4. Align with training columns
+    #    If we have the feature list from model.feature_names_in_, we can fill missing columns with 0
+    if all_training_cols is not None:
+        for col in all_training_cols:
+            if col not in df_input_encoded.columns:
+                df_input_encoded[col] = 0
 
-    # Build response
+        # Also ensure the same column order
+        df_input_encoded = df_input_encoded[all_training_cols]
+    else:
+        # If scikit-learn version doesn't have feature_names_in_, 
+        # you'd store them manually or skip the ordering step
+        pass
+
+    # 5. Predict with the loaded RandomForest
+    y_pred_class = model.predict(df_input_encoded)[0]
+    y_pred_probs = model.predict_proba(df_input_encoded)[0]
+    # Probability of class=1 (overdose)
+    overdose_prob = float(y_pred_probs[1])
+
     response = {
-        "isOpioidProbability": float(y_pred_proba),
-        "isOpioidClass": int(y_pred_class)
+        "overdose_probability": overdose_prob,
+        "overdose_class": int(y_pred_class)
     }
 
     return jsonify(response)
 
 if __name__ == "__main__":
-    # Run Flask app (debug mode for development)
+    # Run Flask with debug mode
     app.run(debug=True, port=5000)
 

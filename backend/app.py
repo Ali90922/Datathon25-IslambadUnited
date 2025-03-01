@@ -10,7 +10,7 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 # Enable CORS for all routes
-CORS(app, resources={r"/": {"origins": ""}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # --------------------------------------------------------------------
 # 1. Load the trained model
@@ -108,16 +108,17 @@ def format_output_with_gemini(prediction_json):
     gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_api_key}"
     
     prompt = f"""
-You are an expert data summarizer. Given the JSON output from a substance use prediction model:
+You are an expert data summarizer and storyteller. Given the JSON output from a substance use prediction model:
 
 {prediction_json}
 
-Please provide a nicely formatted, human-friendly summary that explains:
-•⁠  ⁠The predicted overdose probability,
-•⁠  ⁠The overdose class and its meaning,
-•⁠  ⁠The confidence level and its implications,
-•⁠  ⁠And a plain language explanation of any high-risk factors.
-Include any contextual information that may help understand the prediction.
+Please provide a detailed, human-friendly summary that:
+- Clearly explains the predicted overdose probability,
+- Describes the meaning of the overdose class,
+- Explains the confidence level and its implications,
+- Provides a plain language explanation of any high-risk factors,
+- And, if the data is related to a location like Winnipeg, include additional local context and insights.
+Format the summary with clear headings and an engaging tone.
 Return your answer in plain text.
 """
     payload = {
@@ -249,5 +250,5 @@ def predict_from_text():
 # --------------------------------------------------------------------
 # 6. Run the Flask server on a safe port (e.g., 8080)
 # --------------------------------------------------------------------
-if _name_ == "__main__":
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=True)

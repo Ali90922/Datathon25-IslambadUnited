@@ -1,0 +1,64 @@
+curl -X POST -H "Content-Type: application/json" \
+  -d '{
+        "Gender": "Female",
+        "Substance": "meth"
+      }' \
+  http://98.83.145.159:6000/predict_expanded
+
+
+
+
+
+
+
+
+curl -X POST -H "Content-Type: application/json" \
+  -d '{
+        "Age": "15 to 19",
+        "Gender": "Male",
+        "Neighborhood": "riverheights",
+        "Substance": "fentanyl"
+      }' \
+  http://98.83.145.159:6000/predict_expanded
+
+
+
+
+
+
+
+
+
+
+
+curl -X POST -H "Content-Type: application/json" \
+  -d '{
+        "Age": "45 to 49",
+        "Gender": "Female",
+        "Neighborhood": "northend",
+        "Substance": "alcohol"
+      }' \
+  http://98.83.145.159:6000/predict_expanded
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+curl -X POST -H "Content-Type: application/json" \
+  -d '{
+        "Age": "80 to 84",
+        "Gender": "Male",
+        "Neighborhood": "somewhere",
+        "Substance": "meth"
+      }' \
+  http://98.83.145.159:6000/predict_expanded
+

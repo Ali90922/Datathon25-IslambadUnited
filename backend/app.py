@@ -6,7 +6,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS  # Import CORS
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
+# Enable CORS for all routes
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # --------------------------------------------------------------------
 # 1. Load the trained model
@@ -51,8 +52,11 @@ def make_prediction(age_str, gender_str, neigh_str, subst_str):
     })
 
     # 4. One-hot encode
-    df_input_encoded = pd.get_dummies(df_input, columns=["Neighborhood", "Substance"],
-                                      prefix=["neigh", "subst"])
+    df_input_encoded = pd.get_dummies(
+        df_input,
+        columns=["Neighborhood", "Substance"],
+        prefix=["neigh", "subst"]
+    )
 
     # 5. Align columns with training
     if all_training_cols is not None:
@@ -80,8 +84,6 @@ def make_prediction(age_str, gender_str, neigh_str, subst_str):
         explanation.append("Substance suggests a high overdose risk.")
     if neigh_str.lower() == "downtown":
         explanation.append("Downtown area might have higher incidents in this dataset.")
-    # If you want to parse numeric from the age_str, do it now:
-    #   e.g., parse_age("30 to 34") -> 32, then check < 25
     midpoint_age = parse_age(age_str)
     if midpoint_age < 25:
         explanation.append("Younger age group is correlated with certain substance use patterns (example).")
@@ -105,10 +107,9 @@ def home():
 @app.route("/predict_expanded", methods=["POST"])
 def predict_expanded():
     """
-    Same as before: expects JSON with Age, Gender, Neighborhood, Substance
+    Expects JSON with Age, Gender, Neighborhood, Substance
     """
     data = request.get_json() or {}
-
     age_str = data.get("Age", "30 to 34")
     gender_str = data.get("Gender", "unknown")
     neigh_str = data.get("Neighborhood", "unknown")
@@ -131,8 +132,8 @@ def predict_from_text():
     Parses out:
       - Age (from "35 years old")
       - Gender ("female" or "male")
-      - Neighborhood (simple approach: we'll guess 'Robertson' if we see that word)
-      - Substance: we'll guess from a small list, or fallback to "none"
+      - Neighborhood (naive approach)
+      - Substance (naive approach)
     Then calls make_prediction(...) and returns the same structure.
     """
     body = request.get_json() or {}
@@ -145,12 +146,11 @@ def predict_from_text():
     age_str_detected = None
     match = re.search(r"(\d{1,3})\s?years?\s?old", user_text)
     if match:
-        # If found, convert '35' to a range string "35 to 35"
         numeric_age = match.group(1)
         age_str_detected = f"{numeric_age} to {numeric_age}"
     else:
         # Fallback if we can't find numeric age
-        age_str_detected = "30 to 34"  # or any default
+        age_str_detected = "30 to 34"
 
     # B) Parse Gender
     gender_detected = "unknown"
@@ -160,22 +160,15 @@ def predict_from_text():
         gender_detected = "female"
 
     # C) Parse Neighborhood
-    #   For simplicity, let's assume the user might mention "robertson" directly.
-    #   We'll do a naive approach: find any capitalized word or something custom.
-    #   But let's do it with a simple guess:
+    #   For simplicity, let's assume the user might mention "robertson" or a few known areas
     neighborhood_detected = "unknown"
-    # If you know there's a set of known neighborhoods, you can do partial matching.
-    # For demonstration, we do naive:
-    # Check each word, if it looks "robertson," or "downtown," etc.
-    # We'll just do a mini-check:
-    possible_neighborhoods = ["robertson", "downtown", "brooklyn", "queens"]  # example list
+    possible_neighborhoods = ["robertson", "downtown", "brooklyn", "queens"]  # example
     for neigh in possible_neighborhoods:
         if neigh in user_text:
             neighborhood_detected = neigh
             break
 
     # D) Parse Substance
-    #   We'll do the same naive approach for known substances:
     substance_detected = "none"
     possible_substances = ["fentanyl", "opioid", "heroin", "alcohol", "cocaine", "meth"]
     for s in possible_substances:
@@ -183,8 +176,7 @@ def predict_from_text():
             substance_detected = s
             break
 
-    # E) Now we have age_str_detected, gender_detected, neighborhood_detected, substance_detected
-    #    Let's call the same logic used in /predict_expanded
+    # E) Now call the prediction function
     result = make_prediction(
         age_str_detected,
         gender_detected,
@@ -208,4 +200,5 @@ def predict_from_text():
 # 6. Run the Flask server
 # --------------------------------------------------------------------
 if __name__ == "__main__":
+    # Make sure your server is open to external calls if you want outside access
     app.run(host="0.0.0.0", port=6000, debug=True)

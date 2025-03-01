@@ -4,9 +4,13 @@ import re
 import json
 import os
 import requests
+import spacy
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+
+# Initialize spaCy English model
+nlp = spacy.load("en_core_web_sm")
 
 app = Flask(__name__)
 # Enable CORS for all routes
@@ -97,7 +101,56 @@ def make_prediction(age_str, gender_str, neigh_str, subst_str):
     }
 
 # --------------------------------------------------------------------
-# 4. Helper function to format output with the Gemini LLM
+# 4. Improved free-text parser using spaCy
+# --------------------------------------------------------------------
+def parse_free_text(user_text):
+    """
+    Uses spaCy to parse the free-text input and extract:
+      - Age (as a number)
+      - Gender ("male" or "female")
+      - Neighborhood (from a predefined list)
+      - Substance (from a predefined list)
+    Returns a tuple (age, gender, neighborhood, substance) or None if any cannot be extracted.
+    """
+    doc = nlp(user_text)
+    age = None
+    gender = None
+    neighborhood = None
+    substance = None
+
+    # Extract age: look for numeric tokens followed by "year(s)" or "yr(s)"
+    for i, token in enumerate(doc):
+        if token.like_num:
+            # Check if the next token (if any) is a variant of "year"
+            if i + 1 < len(doc) and doc[i + 1].text.lower() in ["year", "years", "yr", "yrs"]:
+                age = token.text
+                break
+
+    # Extract gender
+    if "male" in user_text:
+        gender = "male"
+    elif "female" in user_text:
+        gender = "female"
+
+    # Predefined lists for neighborhood and substance
+    possible_neighborhoods = ["robertson", "downtown", "brooklyn", "queens", "winnipeg"]
+    for token in doc:
+        token_text = token.text.lower()
+        if token_text in possible_neighborhoods:
+            neighborhood = token_text
+            break
+
+    possible_substances = ["fentanyl", "opioid", "heroin", "alcohol", "cocaine", "meth"]
+    for token in doc:
+        token_text = token.text.lower()
+        if token_text in possible_substances:
+            substance = token_text
+            break
+
+    return age, gender, neighborhood, substance
+
+# --------------------------------------------------------------------
+# 5. Helper function to format output with the Gemini LLM
 # --------------------------------------------------------------------
 def format_output_with_gemini(prediction_json):
     """
@@ -118,6 +171,7 @@ Please provide a detailed, human-friendly summary that explains:
 - The confidence level and its implications,
 - A plain language explanation of any high-risk factors,
 - And additional contextual insights (for example, local context related to Winnipeg if applicable).
+
 Format the summary with clear headings and an engaging tone.
 Return your answer in plain text.
 """
@@ -145,7 +199,7 @@ Return your answer in plain text.
         return f"Error from Gemini: {response.status_code} {response.text}"
 
 # --------------------------------------------------------------------
-# 5. Flask endpoints
+# 6. Flask endpoints
 # --------------------------------------------------------------------
 @app.route("/")
 def home():
@@ -180,64 +234,43 @@ def predict_from_text():
     """
     Expects JSON like:
     {
-      "text": "What is the substance use of a 35 years old female in Robertson?"
+      "text": "What is the substance use of a 35 years old female in Winnipeg?"
     }
-    Parses the free-text to extract Age, Gender, Neighborhood, and Substance,
-    then calls the prediction function and pipes the result through Gemini for formatting.
+    Uses spaCy to parse the free-text input to extract Age, Gender, Neighborhood, and Substance.
+    Then calls the prediction function and pipes the result through Gemini for formatting.
     """
     body = request.get_json() or {}
-    user_text = body.get("text", "").lower()
+    user_text = body.get("text", "")
     if not user_text:
         return jsonify({"error": "No text provided"}), 400
 
-    # Improved regex to capture age in various formats, e.g., "35 years old" or "35 yrs old"
-    match = re.search(r"(\d{1,3})\s*(?:years?|yrs?)\b(?:\s*old)?", user_text)
-    if match:
-        numeric_age = match.group(1)
-        age_str_detected = f"{numeric_age} to {numeric_age}"
-    else:
+    # Use spaCy to parse the text
+    age, gender, neighborhood, substance = parse_free_text(user_text.lower())
+    
+    # Check that all values were successfully extracted
+    if not age:
         return jsonify({"error": "Could not extract age from input."}), 400
-
-    # Extract gender
-    if "male" in user_text:
-        gender_detected = "male"
-    elif "female" in user_text:
-        gender_detected = "female"
-    else:
+    if not gender:
         return jsonify({"error": "Could not extract gender from input."}), 400
-
-    # Extract neighborhood: check for known neighborhoods (including Winnipeg)
-    possible_neighborhoods = ["robertson", "downtown", "brooklyn", "queens", "winnipeg"]
-    neighborhood_detected = None
-    for neigh in possible_neighborhoods:
-        if neigh in user_text:
-            neighborhood_detected = neigh
-            break
-    if not neighborhood_detected:
+    if not neighborhood:
         return jsonify({"error": "Could not extract a valid neighborhood from input."}), 400
-
-    # Extract substance: check for known substances
-    possible_substances = ["fentanyl", "opioid", "heroin", "alcohol", "cocaine", "meth"]
-    substance_detected = None
-    for s in possible_substances:
-        if s in user_text:
-            substance_detected = s
-            break
-    if not substance_detected:
+    if not substance:
         return jsonify({"error": "Could not extract a valid substance from input."}), 400
+
+    age_str_detected = f"{age} to {age}"  # Use the extracted age as a range
 
     result = make_prediction(
         age_str_detected,
-        gender_detected,
-        neighborhood_detected,
-        substance_detected
+        gender,
+        neighborhood,
+        substance
     )
 
     parsed_data = {
         "Age": age_str_detected,
-        "Gender": gender_detected,
-        "Neighborhood": neighborhood_detected,
-        "Substance": substance_detected
+        "Gender": gender,
+        "Neighborhood": neighborhood,
+        "Substance": substance
     }
     
     prediction_json = json.dumps({
@@ -254,7 +287,7 @@ def predict_from_text():
     })
 
 # --------------------------------------------------------------------
-# 6. Run the Flask server on a safe port (e.g., 8080)
+# 7. Run the Flask server on a safe port (e.g., 8080)
 # --------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=True)

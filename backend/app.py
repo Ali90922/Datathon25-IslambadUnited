@@ -108,16 +108,17 @@ def format_output_with_gemini(prediction_json):
     gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_api_key}"
     
     prompt = f"""
-You are an expert data summarizer. Given the JSON output from a substance use prediction model:
+You are an expert data summarizer and storyteller. Given the JSON output from a substance use prediction model:
 
 {prediction_json}
 
-Please provide a nicely formatted, human-friendly summary that explains:
+Please provide a detailed, human-friendly summary that explains:
 - The predicted overdose probability,
 - The overdose class and its meaning,
 - The confidence level and its implications,
-- And a plain language explanation of any high-risk factors.
-Include any contextual information that may help understand the prediction.
+- A plain language explanation of any high-risk factors,
+- And additional contextual insights (for example, local context related to Winnipeg if applicable).
+Format the summary with clear headings and an engaging tone.
 Return your answer in plain text.
 """
     payload = {
@@ -162,10 +163,15 @@ def predict_expanded():
     }
     """
     data = request.get_json() or {}
-    age_str = data.get("Age", "30 to 34")
-    gender_str = data.get("Gender", "unknown")
-    neigh_str = data.get("Neighborhood", "unknown")
-    subst_str = data.get("Substance", "none")
+    age_str = data.get("Age")
+    gender_str = data.get("Gender")
+    neigh_str = data.get("Neighborhood")
+    subst_str = data.get("Substance")
+    
+    # Validate that all fields are provided
+    if not all([age_str, gender_str, neigh_str, subst_str]):
+        return jsonify({"error": "Missing one or more required fields: Age, Gender, Neighborhood, Substance"}), 400
+    
     result = make_prediction(age_str, gender_str, neigh_str, subst_str)
     return jsonify(result)
 
@@ -181,42 +187,45 @@ def predict_from_text():
     """
     body = request.get_json() or {}
     user_text = body.get("text", "").lower()
-
     if not user_text:
         return jsonify({"error": "No text provided"}), 400
 
-    # Parse Age from "NN years old"
-    match = re.search(r"(\d{1,3})\s?years?\s?old", user_text)
+    # Improved regex to capture age in various formats, e.g., "35 years old" or "35 yrs old"
+    match = re.search(r"(\d{1,3})\s*(?:years?|yrs?)\b(?:\s*old)?", user_text)
     if match:
         numeric_age = match.group(1)
         age_str_detected = f"{numeric_age} to {numeric_age}"
     else:
-        age_str_detected = "30 to 34"
+        return jsonify({"error": "Could not extract age from input."}), 400
 
-    # Parse Gender
-    gender_detected = "unknown"
+    # Extract gender
     if "male" in user_text:
         gender_detected = "male"
     elif "female" in user_text:
         gender_detected = "female"
+    else:
+        return jsonify({"error": "Could not extract gender from input."}), 400
 
-    # Parse Neighborhood (naive approach)
-    neighborhood_detected = "unknown"
-    possible_neighborhoods = ["robertson", "downtown", "brooklyn", "queens"]
+    # Extract neighborhood: check for known neighborhoods (including Winnipeg)
+    possible_neighborhoods = ["robertson", "downtown", "brooklyn", "queens", "winnipeg"]
+    neighborhood_detected = None
     for neigh in possible_neighborhoods:
         if neigh in user_text:
             neighborhood_detected = neigh
             break
+    if not neighborhood_detected:
+        return jsonify({"error": "Could not extract a valid neighborhood from input."}), 400
 
-    # Parse Substance (naive approach)
-    substance_detected = "none"
+    # Extract substance: check for known substances
     possible_substances = ["fentanyl", "opioid", "heroin", "alcohol", "cocaine", "meth"]
+    substance_detected = None
     for s in possible_substances:
         if s in user_text:
             substance_detected = s
             break
+    if not substance_detected:
+        return jsonify({"error": "Could not extract a valid substance from input."}), 400
 
-    # Call the prediction function with parsed fields
     result = make_prediction(
         age_str_detected,
         gender_detected,
@@ -231,13 +240,11 @@ def predict_from_text():
         "Substance": substance_detected
     }
     
-    # Build a JSON string from the parsed data and prediction to send to Gemini
     prediction_json = json.dumps({
         "parsed_data": parsed_data,
         "prediction": result
     }, indent=2)
     
-    # Get the formatted output from Gemini
     formatted_output = format_output_with_gemini(prediction_json)
     
     return jsonify({

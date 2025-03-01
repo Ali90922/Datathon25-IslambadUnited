@@ -5,41 +5,65 @@ import re
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# -------------------------
-# 1. Setup Flask
-# -------------------------
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
 
-# -------------------------
-# 2. Load Model and Dataset
-# -------------------------
+# ------------------------------------------------------------------
+# 1. Load Model
+# ------------------------------------------------------------------
 model = joblib.load("model_expanded.pkl")
 all_training_cols = getattr(model, "feature_names_in_", None)
 
-# Load dataset.csv to memory
-df_dataset = pd.read_csv("Substance_Use_20250301.csv")  # Change to your actual path or method
-# Convert columns to lower-case or standard forms where needed
-df_dataset["Neighbourhood"] = df_dataset["Neighbourhood"].str.lower()
-df_dataset["Substance"] = df_dataset["Substance"].str.lower()
+# ------------------------------------------------------------------
+# 2. Load Dataset
+#    (Use your real CSV name; e.g., 'Substance_Use_20250301.csv')
+# ------------------------------------------------------------------
+df_dataset = pd.read_csv("Substance_Use_20250301.csv")  # or "dataset.csv" if renamed
+df_dataset["Neighbourhood"] = df_dataset["Neighbourhood"].astype(str).str.lower()
+df_dataset["Substance"] = df_dataset["Substance"].astype(str).str.lower()
+df_dataset["Age"] = df_dataset["Age"].astype(str)
 
-# Extract possible unique sets to validate user inputs
-valid_neighborhoods = set(df_dataset["Neighbourhood"].dropna().unique())
-valid_substances = set(df_dataset["Substance"].dropna().unique())
-valid_age_ranges = set(df_dataset["Age"].dropna().unique())  # e.g., '35 to 39'
+valid_neighborhoods = set(df_dataset["Neighbourhood"].unique())
+valid_substances = set(df_dataset["Substance"].unique())
+valid_age_ranges = set(df_dataset["Age"].unique())  # e.g. "20 to 24", "25 to 29", etc.
 
-# -------------------------
-# 3. Helper Functions
-# -------------------------
+# ------------------------------------------------------------------
+# 3. Precompute all numeric ranges for easy lookup
+# ------------------------------------------------------------------
+age_bins = []
+for age_range_str in valid_age_ranges:
+    parts = age_range_str.split(" to ")
+    if len(parts) == 2:
+        try:
+            low = int(parts[0])
+            high = int(parts[1])
+            age_bins.append((low, high, age_range_str))
+        except ValueError:
+            # Not a valid "X to Y" format
+            pass
+
+def map_numeric_age_to_range(numeric_age):
+    """
+    Given a numeric age (e.g., 23), find which "X to Y" range it falls into.
+    Returns the matching string, e.g. "20 to 24" or None if none found.
+    """
+    for (low, high, label) in age_bins:
+        if low <= numeric_age <= high:
+            return label
+    return None
+
+# ------------------------------------------------------------------
+# 4. Helper Functions for Model
+# ------------------------------------------------------------------
 def parse_age(age_str):
-    """Parses the 'Age' string like '30 to 34' and returns an integer midpoint."""
+    """Convert '30 to 34' into an integer midpoint 32, etc. Fallback=30 if fail."""
     try:
         parts = age_str.split(" to ")
         low = int(parts[0])
         high = int(parts[1])
         return (low + high) // 2
     except:
-        return 30  # fallback
+        return 30
 
 def build_input_dataframe(age_val, gender_str, neigh_str, subst_str):
     """Build and one-hot encode the input row to match the model's expected columns."""
@@ -54,11 +78,11 @@ def build_input_dataframe(age_val, gender_str, neigh_str, subst_str):
         "Substance": [subst_str.lower()]
     })
 
-    # One-hot encode needed columns
+    # One-hot encode
     df_input_encoded = pd.get_dummies(df_input, columns=["Neighborhood", "Substance"],
                                       prefix=["neigh", "subst"])
     # Align with training columns
-    if all_training_cols is not None:
+    if all_training_cols:
         for col in all_training_cols:
             if col not in df_input_encoded.columns:
                 df_input_encoded[col] = 0
@@ -66,8 +90,7 @@ def build_input_dataframe(age_val, gender_str, neigh_str, subst_str):
 
     return df_input_encoded
 
-def generate_explanation(overdose_probability, age_val, gender_str, neigh_str, subst_str):
-    """Generate a textual explanation based on input features and outcome."""
+def generate_explanation(prob, age_val, gender_str, neigh_str, subst_str):
     explanation = []
     # Example logic
     if "opioid" in subst_str or "fentanyl" in subst_str:
@@ -76,12 +99,12 @@ def generate_explanation(overdose_probability, age_val, gender_str, neigh_str, s
         explanation.append("Downtown area might have higher incidents in the dataset.")
     if age_val < 25:
         explanation.append("Younger age group might have certain higher risk factors.")
+
     if not explanation:
         return "No specific high-risk factors detected in the input."
     return " ".join(explanation)
 
 def assign_confidence(prob):
-    """Assign confidence labels based on the probability."""
     if prob > 0.7:
         return "High"
     elif prob > 0.3:
@@ -89,13 +112,25 @@ def assign_confidence(prob):
     else:
         return "Low"
 
-def is_valid_value(value, valid_set):
-    """Check if value is in the known set (case-insensitive)."""
-    return value.lower() in (x.lower() for x in valid_set)
+# ------------------------------------------------------------------
+# 5. Simple partial matching function for Neighborhood/Substance
+# ------------------------------------------------------------------
+def partial_match(term, candidates):
+    """
+    Return the first candidate from 'candidates' that is a substring of 'term'
+    OR 'term' is a substring of that candidate. If none found, return None.
+    """
+    term_lower = term.lower()
+    for c in candidates:
+        c_lower = c.lower()
+        # Simple check: either "downtown" in "downtown area" or vice versa
+        if term_lower in c_lower or c_lower in term_lower:
+            return c
+    return None
 
-# -------------------------
-# 4. Endpoints
-# -------------------------
+# ------------------------------------------------------------------
+# 6. Flask Endpoints
+# ------------------------------------------------------------------
 @app.route("/")
 def home():
     return "Enhanced Substance Use Prediction API is running!"
@@ -112,25 +147,20 @@ def predict_expanded():
     }
     """
     data = request.get_json() or {}
-
-    # Extract fields from JSON
     age_str = data.get("Age", "30 to 34")
     gender_str = data.get("Gender", "unknown")
     neigh_str = data.get("Neighborhood", "unknown")
     subst_str = data.get("Substance", "none")
 
-    # Convert age from range to midpoint integer
+    # Convert the range to midpoint
     age_val = parse_age(age_str)
 
-    # Build input DataFrame, align columns
     df_input_encoded = build_input_dataframe(age_val, gender_str, neigh_str, subst_str)
 
-    # Predict
     y_pred_class = model.predict(df_input_encoded)[0]
     y_pred_proba = model.predict_proba(df_input_encoded)[0][1]
     overdose_probability = float(y_pred_proba)
 
-    # Confidence & Explanation
     confidence = assign_confidence(overdose_probability)
     explanation_str = generate_explanation(overdose_probability, age_val, gender_str, neigh_str, subst_str)
 
@@ -144,52 +174,50 @@ def predict_expanded():
 @app.route("/process_query", methods=["POST"])
 def process_query():
     """
-    Endpoint that takes a free-text `query` and tries to extract:
-    - Age (e.g. '25 years old' or an exact match '30 to 34'),
-    - Gender ('male' or 'female'),
-    - Neighborhood,
-    - Substance
+    Takes a free-text `query` and tries to extract:
+      - Age (e.g. '25 to 29' or '25 years old')
+      - Gender ('male' or 'female')
+      - Neighborhood (partial match)
+      - Substance (partial match)
 
-    Then it forwards the parsed data to the model.
+    Then runs a prediction using the model.
     """
     body = request.get_json() or {}
-    query = body.get("query", "").lower()  # the free-text query
+    query = body.get("query", "").lower()
 
     if not query:
         return jsonify({"error": "Missing query text"}), 400
 
     # -------------------------
-    # 4a. Extract Age
+    # A. Extract Numeric Age from "XX years old"
     # -------------------------
-    # Option A: if your dataset only has range strings like "30 to 34" or "35 to 39",
-    # you might do a simple check for these substrings in the query.
-    # Or do a regex approach for "(\d{1,3})\s?(?:years? old|yrs?)" etc.
-    #
-    # Here, we'll do a naive approach: check each valid_age_range in the query
-    # and pick the first that appears. If none found, age = None
-    # (You can refine as needed.)
-    detected_age_range = None
-    for ar in valid_age_ranges:
-        # e.g. "30 to 34"
-        if ar.lower() in query:
-            detected_age_range = ar
-            break
-
-    # Alternatively, if you want to detect "25 years old" patterns, do:
     match_age = re.search(r"(\d{1,3})\s?(?:years? old|yrs?)", query)
+    numeric_age = None
     if match_age:
-        # see if the user wrote "25 years old" but your dataset expects something like "25 to 29"
-        # you'd have to map numeric ages to your dataset's nearest range
-        # For now, let's just override `detected_age_range` with the numeric
         numeric_age_str = match_age.group(1)
-        # We won't do a strict "is this in the dataset" check, since dataset has ranges
-        # We'll do a fallback. Or you can skip this if your dataset strictly has "25 to 29"
-        detected_age_range = f"{numeric_age_str} to {numeric_age_str}"
+        numeric_age = int(numeric_age_str)
 
     # -------------------------
-    # 4b. Extract Gender
+    # B. Determine age range from numeric age or exact substring
     # -------------------------
-    # If you only handle male/female:
+    detected_age_range = None
+    # 1) If numeric age found, try to map to "X to Y"
+    if numeric_age is not None:
+        mapped = map_numeric_age_to_range(numeric_age)
+        if mapped:
+            detected_age_range = mapped
+
+    # 2) Otherwise, see if there's an exact "X to Y" substring in the query
+    if not detected_age_range:
+        for ar in valid_age_ranges:
+            if ar.lower() in query:  # e.g. "30 to 34"
+                detected_age_range = ar
+                break
+
+    # -------------------------
+    # C. Extract Gender (male/female)
+    # -------------------------
+    # Very naive approach
     gender = None
     if "male" in query:
         gender = "male"
@@ -197,43 +225,24 @@ def process_query():
         gender = "female"
 
     # -------------------------
-    # 4c. Extract Neighborhood
+    # D. Partial match for Neighborhood & Substance
     # -------------------------
-    # We'll look for any valid neighborhood in the query:
-    # (In a real system, you might do fuzzy matching or an NLP approach.)
-    detected_neighborhood = None
-    for neigh in valid_neighborhoods:
-        if neigh in query:
-            detected_neighborhood = neigh
-            break
+    detected_neighborhood = partial_match(query, valid_neighborhoods)
+    detected_substance = partial_match(query, valid_substances)
 
     # -------------------------
-    # 4d. Extract Substance
-    # -------------------------
-    # We'll look for any valid substance in the query:
-    detected_substance = None
-    for sub in valid_substances:
-        if sub in query:
-            detected_substance = sub
-            break
-
-    # -------------------------
-    # 4e. Validate or Error
+    # E. Check if we got them all
     # -------------------------
     if not detected_age_range or not gender or not detected_neighborhood or not detected_substance:
         return jsonify({"error": "Missing or invalid data (Age, Gender, Neighborhood, Substance)"}), 400
 
-    # Everything is extracted and valid. We now have age, gender, neighborhood, substance.
-    # Let's pass them along to the same code that /predict_expanded uses.
-    # We can either:
-    #    A) Call model right here
-    #    B) Or forward a request to /predict_expanded
-    #
-    # For simplicity, let's call the model right here.
-
+    # Convert age range to midpoint integer
     age_val = parse_age(detected_age_range)
-    df_input_encoded = build_input_dataframe(age_val, gender, detected_neighborhood, detected_substance)
 
+    # -------------------------
+    # F. Model prediction
+    # -------------------------
+    df_input_encoded = build_input_dataframe(age_val, gender, detected_neighborhood, detected_substance)
     y_pred_class = model.predict(df_input_encoded)[0]
     y_pred_proba = model.predict_proba(df_input_encoded)[0][1]
     overdose_probability = float(y_pred_proba)
@@ -247,15 +256,13 @@ def process_query():
         "confidence": confidence,
         "explanation": explanation_str,
         "parsed_data": {
-            "Age": detected_age_range,
+            "AgeRange": detected_age_range,
             "Gender": gender,
             "Neighborhood": detected_neighborhood,
             "Substance": detected_substance
         }
     })
 
-# -------------------------
-# 5. Run the Flask App
-# -------------------------
 if __name__ == "__main__":
+    # Run on 0.0.0.0:6000 so it's externally accessible if your security group/firewall allows it.
     app.run(host="0.0.0.0", port=6000, debug=True)

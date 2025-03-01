@@ -40,7 +40,7 @@ def parse_age(age_str):
 def make_prediction(age_str, gender_str, neigh_str, subst_str):
     # Convert the age range to a numeric midpoint
     age_val = parse_age(age_str)
-    # Encode gender: "male" is 1, anything else is 0
+    # Encode gender: "male" is 1, others 0
     gender_num = 1 if gender_str.strip().lower() == "male" else 0
 
     # Build the input DataFrame
@@ -58,14 +58,14 @@ def make_prediction(age_str, gender_str, neigh_str, subst_str):
         prefix=["neigh", "subst"]
     )
 
-    # Ensure the DataFrame has the same columns as the model training
+    # Ensure the DataFrame has the same columns as used during training
     if all_training_cols is not None:
         for col in all_training_cols:
             if col not in df_input_encoded.columns:
                 df_input_encoded[col] = 0
         df_input_encoded = df_input_encoded[all_training_cols]
 
-    # Get predictions
+    # Get predictions from the model
     y_pred_class = model.predict(df_input_encoded)[0]
     y_pred_proba = model.predict_proba(df_input_encoded)[0][1]
     overdose_probability = float(y_pred_proba)
@@ -78,7 +78,7 @@ def make_prediction(age_str, gender_str, neigh_str, subst_str):
     else:
         confidence = "Low"
 
-    # Generate a simple explanation based on input features
+    # Generate a simple explanation
     explanation = []
     if "opioid" in subst_str.lower() or "fentanyl" in subst_str.lower():
         explanation.append("Substance suggests a high overdose risk.")
@@ -103,9 +103,8 @@ def format_output_with_gemini(prediction_json):
     """
     Sends the prediction JSON to the Gemini API and returns a nicely formatted summary.
     """
-    gemini_api_key = os.getenv("GEMINI_API_KEY")
-    if not gemini_api_key:
-        return "Gemini API key not set."
+    # Embedded Gemini API key (insecure for production)
+    gemini_api_key = "AIzaSyD9DdnncGKuhhjIMBFXiU7ZVspWtv1qvgI"
     gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_api_key}"
     
     prompt = f"""
@@ -114,10 +113,10 @@ You are an expert data summarizer. Given the JSON output from a substance use pr
 {prediction_json}
 
 Please provide a nicely formatted, human-friendly summary that explains:
-- The predicted overdose probability.
-- The overdose class and its meaning.
-- The confidence level and its implications.
-- A plain language explanation of any high-risk factors.
+- The predicted overdose probability,
+- The overdose class and its meaning,
+- The confidence level and its implications,
+- And a plain language explanation of any high-risk factors.
 Include any contextual information that may help understand the prediction.
 Return your answer in plain text.
 """
@@ -127,15 +126,19 @@ Return your answer in plain text.
         ]
     }
     headers = {'Content-Type': 'application/json'}
+    
     response = requests.post(gemini_url, headers=headers, json=payload)
     
     if response.status_code == 200:
         data = response.json()
         try:
-            # Assuming the response returns a structure with a "candidates" list and "output" key
-            formatted_text = data["candidates"][0]["output"]
+            candidate = data["candidates"][0]
+            # Try both "output" and "content" keys
+            formatted_text = candidate.get("output") or candidate.get("content")
+            if not formatted_text:
+                formatted_text = "No formatted output found in Gemini response."
         except Exception as e:
-            formatted_text = "Error parsing Gemini response."
+            formatted_text = f"Error parsing Gemini response: {str(e)}"
         return formatted_text
     else:
         return f"Error from Gemini: {response.status_code} {response.text}"
@@ -228,7 +231,7 @@ def predict_from_text():
         "Substance": substance_detected
     }
     
-    # Build a JSON string from the parsed data and prediction
+    # Build a JSON string from the parsed data and prediction to send to Gemini
     prediction_json = json.dumps({
         "parsed_data": parsed_data,
         "prediction": result

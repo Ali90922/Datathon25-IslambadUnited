@@ -1,45 +1,60 @@
+import { useRef, useState } from "react";
+import { Send } from "lucide-react";
+
 const handleSubmit = (e) => {
 	e.preventDefault();
 };
 
 const Home = () => {
-	const chats = [
-		{
-			sender: "user",
-			message:
-				"Lorem ipsum dolor sit amet consectetur, adipisicing elit. Praesentium, id adipisci sequi veritatis ad aliquid repellendus eius, quisquam laboriosam rerum ea mollitia doloribus inventore quod vero? Sunt, sed! Ea, commodi.",
-		},
-		{
-			sender: "bot",
-			message:
-				"Lorem ipsum dolor sit amet consectetur, adipisicing elit. Praesentium, id adipisci sequi veritatis ad aliquid repellendus eius, quisquam laboriosam rerum ea mollitia doloribus inventore quod vero? Sunt, sed! Ea, commodi.",
-		},
-		{
-			sender: "bot",
-			message:
-				"Lorem ipsum dolor sit amet consectetur, adipisicing elit. Praesentium, id adipisci sequi veritatis ad aliquid repellendus eius, quisquam laboriosam rerum ea mollitia doloribus inventore quod vero? Sunt, sed! Ea, commodi.",
-		},
-		{
-			sender: "user",
-			message:
-				"Lorem ipsum dolor sit amet consectetur, adipisicing elit. Praesentium, id adipisci sequi veritatis ad aliquid repellendus eius, quisquam laboriosam rerum ea mollitia doloribus inventore quod vero? Sunt, sed! Ea, commodi.",
-		},
-	];
+	const [chats, setChats] = useState([]);
+	const messageRef = useRef(null);
+
+	const handleSubmit = (e) => {
+		e.preventDefault();
+
+		const message = messageRef.current.value.trim();
+		if (!message) return;
+
+		setChats([...chats, { sender: "user", message }]);
+		messageRef.current.value = ""; // Clear textarea after submit
+	};
+
+	const handleKeyDown = (e) => {
+		if (e.key === "Enter" && !e.shiftKey) {
+			e.preventDefault();
+			handleSubmit(e);
+		}
+	};
 
 	return (
 		<main className='relative h-[80vh] flex flex-col gap-4 overflow-y-auto custom-scrollbar'>
-			{chats.map((blob, index) => (
-				<div
-					key={index}
-					className={`max-w-3/5 rounded-2xl p-4 ${
-						blob.sender === "user" ? "bg-black ml-auto" : "bg-secondary"
-					}`}
+			{chats.length > 0 ? (
+				chats.map((blob, index) => (
+					<div
+						key={index}
+						className={`max-w-3/5 rounded-2xl p-4 ${
+							blob.sender === "user" ? "bg-black ml-auto" : "bg-secondary"
+						}`}
+					>
+						<p>{blob.message}</p>
+					</div>
+				))
+			) : (
+				<p>Write a message to begin...</p>
+			)}
+			<form onSubmit={handleSubmit} className='relative py-12 flex'>
+				<textarea
+					ref={messageRef}
+					onKeyDown={handleKeyDown}
+					className='w-full h-24 bg-foreground rounded-3xl p-4 px-6 resize-none text-xl outline-none'
+					placeholder='Type a message...'
+				/>
+				<button
+					type='submit'
+					className='ml-4 bg-accent text-white px-4 py-2 rounded-2xl flex items-center justify-center h-full aspect-square'
 				>
-					<p>{blob.message}</p>
-				</div>
-			))}
-			<form onSubmit={handleSubmit} className='relative py-12'>
-				<input className='fixed bottom-8 mx-auto w-3/5 h-24 bg-white rounded-full px-6' />
+					<Send />
+				</button>
 			</form>
 		</main>
 	);

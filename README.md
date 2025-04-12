@@ -1,5 +1,3 @@
-Apologies for that! Here's the corrected version with proper formatting for Bash commands:
-
 ---
 
 # Substance Sense 🧠💊

@@ -1,0 +1,12 @@
+In this demo setup, overdose_class is the binary classification output from the model:
+overdose_class = 1 means the model is predicting an overdose incident (based on the training logic).
+overdose_class = 0 means the model predicts no overdose.
+This field comes directly from model.predict(...), which returns the class label – in our example, we set the label to 1 if the substance included the word "opioid" during training (and thus we called that “IsOverdose”), or 0 otherwise.
+So effectively, overdose_class is the final yes/no decision the model makes about whether the incident is likely to be an overdose (1) or not (0). By contrast, overdose_probability is the model’s estimated probability/confidence that the class is 1 (i.e., that it’s an overdose).
+
+
+
+
+
+
+

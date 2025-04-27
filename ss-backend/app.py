@@ -260,5 +260,5 @@ def predict_from_text():
 # Run the Flask server on port 8082
 # --------------------------------------------------------------------
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8082))
+    port = int(os.getenv("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=True)

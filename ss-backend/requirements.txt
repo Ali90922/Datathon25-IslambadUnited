@@ -1,5 +1,10 @@
+flask
+flask-cors
 pandas
 scikit-learn
-flask
+numpy
+requests
+python-dotenv
+matplotlib
+seaborn
 joblib
-

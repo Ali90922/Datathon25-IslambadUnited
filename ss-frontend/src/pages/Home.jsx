@@ -11,6 +11,7 @@ const Home = () => {
 
 	const handleSubmit = async (e) => {
 		e.preventDefault();
+		if (loading) return;
 
 		const message = messageRef.current.value.trim();
 		if (!message) return;

@@ -11,7 +11,7 @@ import os
 load_dotenv()
 
 app = Flask(__name__)  # Use __name__
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "https://substanse-sense.netlify.app"}})
 
 # --------------------------------------------------------------------
 # 1. Load the trained model (retained for endpoint compatibility)

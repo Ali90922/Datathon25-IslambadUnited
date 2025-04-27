@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 @theme {
-	--font-primary: Roboto, sans-serif;
+	--font-primary: serif;
 
-	--color-primary: #2c3e50; /* Dark blue-gray for primary elements */
-	--color-background: #34495e; /* Medium blue-gray for the background */
-	--color-foreground: #e1e7ec; /* Light, friendly blue for foreground elements */
-	--color-accent: #3498db; /* Vibrant blue accent for buttons, highlights, etc. */
-	--color-text-primary: #f1f5f9; /* Light text color for clear readability */
+	--color-background: #333d3b; /* Dark Gray for top of gradient */
+	--color-primary: #2e2e2e; /* Even Darker Gray for bottom of gradient */
+	--color-foreground: #f0f0f0; /* Light Gray-White for cards, panels, etc. */
+	--color-accent: #e63946; /* Bold Warm Red for highlights */
+	--color-text-primary: #f5f0e6; /* Creamy Beige for readable text */
 }
 
 @layer base {

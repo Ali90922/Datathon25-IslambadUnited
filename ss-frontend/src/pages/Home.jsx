@@ -72,7 +72,7 @@ const Home = () => {
 
 	return (
 		<>
-			<section className='flex flex-col flex-grow overflow-y-auto custom-scrollbar gap-2 p-8 sm:px-16 md:px-32 lg:px-64'>
+			<section className='flex flex-col flex-grow overflow-y-auto custom-scrollbar gap-2 p-2 sm:px-16 md:px-32 lg:px-64'>
 				{chats.length > 0 ? (
 					chats.map((blob, index) => (
 						<motion.div
@@ -80,8 +80,10 @@ const Home = () => {
 							initial={{ scale: 0.9, opacity: 0 }}
 							animate={{ scale: 1, opacity: 1 }}
 							transition={{ duration: 1, ease: "easeOut" }}
-							className={`rounded-2xl p-4 flex flex-col gap-4 max-w-11/12 ${
-								blob.sender === "user" ? "bg-black ml-auto text-lg" : "bg-none text-xl pb-8"
+							className={`rounded-2xl p-3 flex flex-col gap-4 sm:max-w-11/12 ${
+								blob.sender === "user"
+									? "bg-accent ml-auto text-lg"
+									: "bg-none text-lg sm:text-xl pb-8"
 							}`}
 						>
 							<ReactMarkdown>{blob.message}</ReactMarkdown>

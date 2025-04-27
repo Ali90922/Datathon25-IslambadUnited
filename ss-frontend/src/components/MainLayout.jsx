@@ -4,7 +4,9 @@ const MainLayout = ({ children }) => {
 	return (
 		<div className='min-h-screen flex flex-col'>
 			<Header />
-			<main className='flex-grow bg-linear-to-b from-background to-primary pb-32'>{children}</main>
+			<main className='flex-grow bg-linear-to-b from-background to-primary pb-32 pt-2'>
+				{children}
+			</main>
 		</div>
 	);
 };

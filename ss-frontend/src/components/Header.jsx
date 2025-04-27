@@ -2,9 +2,9 @@ import { Link } from "react-router-dom";
 
 const Header = () => {
 	return (
-		<nav className='bg-linear-to-b from-slate-800 to-background'>
+		<nav className='bg-linear-to-t from-primary to-background'>
 			<ul className='flex items-center justify-center'>
-				<Link to='/' className='text-3xl font-bold p-8'>
+				<Link to='/' className='text-3xl font-extralight p-4'>
 					Substance Sense
 				</Link>
 			</ul>

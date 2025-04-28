@@ -11,7 +11,7 @@ import os
 load_dotenv()
 
 app = Flask(__name__)  # Use __name__
-CORS(app, resources={r"/*": {"origins": "https://substanse-sense.netlify.app"}})
+CORS(app, resources={r"/*": {"origins": "https://substance-sense.netlify.app"}})
 
 # --------------------------------------------------------------------
 # 1. Load the trained model (retained for endpoint compatibility)
@@ -169,9 +169,7 @@ def predict_expanded():
       "Neighborhood": "exchange",
       "Substance": "fentanyl"
     }
-    Uses fake prediction logic and pipes the output through Gemini for formatting.
     """
-    
     data = request.get_json() or {}
     age_str = data.get("Age")
     gender_str = data.get("Gender")

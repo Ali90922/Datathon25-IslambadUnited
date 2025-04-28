@@ -171,7 +171,6 @@ def predict_expanded():
     }
     Uses fake prediction logic and pipes the output through Gemini for formatting.
     """
-    print(data);
     
     data = request.get_json() or {}
     age_str = data.get("Age")

@@ -5,40 +5,7 @@ import { motion } from "framer-motion";
 const API_URL = `${import.meta.env.VITE_BACKEND}/predict_from_text`;
 
 const Home = () => {
-	const [chats, setChats] = useState([
-		{
-			sender: "user",
-			message:
-				"What is the overdose probability for a 23 year old male in Fort Richmond, using alcohol?",
-		},
-		{
-			message: `Age: 23
-Location: Fort Richmond
-Gender: Male
-Substance: Alcohol
-Overdose Probability
-
-The predicted overdose probability is 67%.
-
-Overdose Risk Class
-
-The overdose risk class is 1, indicating a medium risk of overdose. This level of risk is typically associated with Alcohol use.
-
-Confidence Level
-
-The confidence level is Medium. This suggests the model has identified patterns that lead to this prediction, but there is still a degree of uncertainty. Further information or a more comprehensive assessment could refine the prediction.
-
-High-Risk Factors
-
-The model has identified Alcohol use as a significant factor contributing to the elevated overdose risk.
-
-Local Context (Fort Richmond)
-
-Fort Richmond is a neighborhood in Winnipeg, Manitoba, Canada. Understanding local resources and challenges related to Alcohol use in Fort Richmond could provide valuable context. Local health services and community support groups may be available to assist individuals at risk.
-
-This analysis is based solely on the provided data and should not be considered a definitive diagnosis or prediction. Professional medical and psychological evaluation is essential for a comprehensive assessment and personalized recommendations.`,
-		},
-	]);
+	const [chats, setChats] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const messageRef = useRef(null);
 
